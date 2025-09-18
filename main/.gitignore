@@ -1,0 +1,7 @@
+# Ignore data directories created by Docker containers
+data/
+
+# Ignore internal files and directories
+__pycache__/
+.DS_Store
+*.log

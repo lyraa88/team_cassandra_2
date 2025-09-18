@@ -1,0 +1,32 @@
+version: "3.9"
+services:
+  csv_streamer:
+    build: .
+    container_name: ld-streamer
+    env_file: [ .env ]
+    networks: [ cassandra_etl_net ]
+    depends_on:
+      - kafka_probe
+    volumes:
+      - ../data/log_data/ingest:/app/ingest:ro
+    restart: on-failure
+
+  # Kafka가 준비될 때까지 간단히 대기
+  kafka_probe:
+    image: bitnami/kafka:3.7
+    container_name: ld-kafka-probe
+    networks: [ cassandra_etl_net ]
+    entrypoint: ["/bin/bash","-c"]
+    command:
+      - |
+        for i in {1..60}; do
+          /opt/bitnami/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092 && exit 0
+          echo "waiting kafka... ($$i)"
+          sleep 2
+        done
+        echo "kafka not ready"; exit 1
+
+networks:
+  cassandra_etl_net:
+    external: true
+
