@@ -10,7 +10,7 @@ services:
       - HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false
       - FORMAT=true
     ports:
-      - "9870:9870"   # NameNode UI 
+      - "9870:9870"   # NameNode UI
     volumes:
       - ../data/hdfs/namenode:/hadoop/dfs/name
 
@@ -128,7 +128,25 @@ services:
     networks:
       - cassandra_etl_net
 
+  spark-app:
+    image: bitnami/spark:3.5
+    container_name: kc-spark-app
+    restart: on-failure
+    networks: [ cassandra_etl_net ]
+    depends_on:
+      - kafka
+      - spark-master
+    volumes:
+      - ./spark_app:/opt/bitnami/spark/app
+      - ./data/spark_events:/tmp/spark-events # 이 줄을 추가
+
+    command: >
+      /opt/bitnami/spark/bin/spark-submit
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
+      --master spark://kc-spark-master:7077
+      --conf spark.eventLog.enabled=true
+      /opt/bitnami/spark/app/stream_processor.py
+
 networks:
   cassandra_etl_net:
     external: true
-

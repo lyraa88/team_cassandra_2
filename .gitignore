@@ -1,1 +1,4 @@
 *.zip
+data/cassandra/
+data/hdfs/
+data/kafka/
