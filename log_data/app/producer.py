@@ -23,8 +23,14 @@ def main():
         with open(CSV_PATH, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # overwrite accessed_date with now()
-                row["accessed_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                sent += 1
+
+                if sent % 10 == 0:
+                    # inject a bad record → will fail Step 3 (Date Parsing)
+                    row["accessed_date"] = "BAD_DATE"
+                else:
+                    # overwrite accessed_date with current timestamp
+                    row["accessed_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
                 # key = item_category (must be bytes)
                 key = row["item_category"].encode("utf-8")
@@ -33,7 +39,6 @@ def main():
                 payload = str(row).encode("utf-8")
 
                 producer.send(TOPIC, key=key, value=payload)
-                sent += 1
 
                 if delay > 0:
                     time.sleep(delay)
