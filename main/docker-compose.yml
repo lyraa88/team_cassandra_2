@@ -125,6 +125,7 @@ services:
       - "9042:9042"
     volumes:
       - ../data/cassandra:/var/lib/cassandra
+      - ./cassandra_setup/init.cql:/docker-entrypoint-initdb.d/init.cql
     networks:
       - cassandra_etl_net
 
@@ -146,6 +147,33 @@ services:
       --master spark://kc-spark-master:7077
       --conf spark.eventLog.enabled=true
       /opt/bitnami/spark/app/stream_processor.py
+
+  dbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: kc-dbeaver
+    restart: unless-stopped
+    networks: [ cassandra_etl_net ]
+    ports:
+      - "8978:8978"
+    environment:
+      - CB_SERVER_PORT=8978
+    depends_on:
+      - cassandra
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kc-grafana
+    restart: unless-stopped
+    networks: [ cassandra_etl_net ]
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+    depends_on:
+      - cassandra
 
 networks:
   cassandra_etl_net:
