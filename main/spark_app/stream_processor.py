@@ -55,6 +55,14 @@ def transform_data(df):
     # 3. datetime 칼럼에서 날짜만 남겨 `log_date` 칼럼 생성
     preprocessed_df = preprocessed_df.withColumn("log_date", to_date(to_timestamp(col("accessed_date"), "yyyy-MM-dd HH:mm:ss.SSS")))
 
+    # 4. 타입 캐스팅 추가
+    preprocessed_df = preprocessed_df \
+        .withColumn("sales", col("sales").cast("double")) \
+        .withColumn("returned_amount", col("returned_amount").cast("double")) \
+        .withColumn("duration_(secs)", col("duration_(secs)").cast("int")) \
+        .withColumn("age", col("age").cast("int")) \
+        .withColumn("bytes", col("bytes").cast("int"))
+
     # 오류 로그를 기록할 새로운 컬럼 생성
     preprocessed_with_errors_df = preprocessed_df.withColumn(
         "error_log",
@@ -74,7 +82,7 @@ def write_data(preprocessed_df, kafka_servers):
     valid_data_stream = preprocessed_df.filter(is_valid)
     invalid_data_stream = preprocessed_df.filter(~is_valid)
 
-    # 유효한 데이터를 logs_clean 토픽에 쓰기
+    # === 1) 유효한 데이터를 logs_clean 토픽에 쓰기
     valid_data_stream.drop("original_value").select(to_json(struct(col("*"))).alias("value")) \
         .writeStream \
         .format("kafka") \
@@ -82,8 +90,18 @@ def write_data(preprocessed_df, kafka_servers):
         .option("topic", "logs_clean") \
         .option("checkpointLocation", "/tmp/spark/logs_clean_checkpoint") \
         .start()
+    
+    # === 2) Cassandra 테이블 4개에 적재 ===
+    for table in ["logs_by_ip", "logs_by_day", "logs_by_country", "logs_by_category"]:
+        valid_data_stream.writeStream \
+            .format("org.apache.spark.sql.cassandra") \
+            .option("keyspace", "ecommerce") \
+            .option("table", table) \
+            .option("checkpointLocation", f"/tmp/spark/{table}_checkpoint") \
+            .outputMode("append") \
+            .start()
 
-    # 유효하지 않은 데이터를 logs_dlq 토픽에 원본 상태로 쓰기
+    # === 3) 유효하지 않은 데이터를 logs_dlq 토픽에 원본 상태로 쓰기
     dlq_df = invalid_data_stream.select(
         to_json(
             struct(
@@ -102,19 +120,21 @@ def write_data(preprocessed_df, kafka_servers):
 if __name__ == "__main__":
     spark = SparkSession.builder \
         .appName("LogProcessor") \
-        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+        .config("spark.jars.packages",
+                "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,"
+                "com.datastax.spark:spark-cassandra-connector_2.12:3.5.0") \
+        .config("spark.cassandra.connection.host", "cassandra") \
         .getOrCreate()
     
     spark.sparkContext.setLogLevel("ERROR")
 
-    # 전역 설정
+    # Kafka 설정
     KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
     SOURCE_TOPIC = "logs_raw"
     
-    # 파이프라인 실행
+    # 전체 파이프라인 실행
     raw_df = read_data(spark, KAFKA_BOOTSTRAP_SERVERS, SOURCE_TOPIC)
     processed_df = transform_data(raw_df)
     write_data(processed_df, KAFKA_BOOTSTRAP_SERVERS)
     
-    # 모든 스트림이 종료될 때까지 대기
     spark.streams.awaitAnyTermination()
