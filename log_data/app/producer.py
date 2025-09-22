@@ -8,7 +8,7 @@ load_dotenv()
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TOPIC = os.getenv("KAFKA_TOPIC", "logs_raw")
 CSV_PATH = os.getenv("CSV_PATH", "/app/ingest/logs.csv")
-RATE = float(os.getenv("SEND_RATE_PER_SEC", "50"))
+RATE = float(os.getenv("SEND_RATE_PER_SEC", "5"))
 
 def main():
     producer = KafkaProducer(bootstrap_servers=BOOTSTRAP, acks='all')
@@ -25,7 +25,7 @@ def main():
             for row in reader:
                 sent += 1
 
-                if sent % 10 == 0:
+                if sent % 100 == 0:
                     # inject a bad record → will fail Step 3 (Date Parsing)
                     row["accessed_date"] = "BAD_DATE"
                 else:
